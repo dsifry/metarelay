@@ -1,0 +1,30 @@
+# GitHub App Manifest for Metarelay
+# Use this to create a GitHub App via https://github.com/settings/apps/new
+# or via the manifest flow: https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest
+
+name: Metarelay
+description: Webhook relay for Claude Code orchestration
+url: https://github.com/your-org/metarelay
+public: false
+
+# Webhook configuration
+# Set webhook_url to your Supabase Edge Function URL:
+# https://YOUR-PROJECT.supabase.co/functions/v1/github-webhook
+hook_attributes:
+  url: https://YOUR-PROJECT.supabase.co/functions/v1/github-webhook
+  active: true
+
+# Events to subscribe to
+default_events:
+  - check_run
+  - check_suite
+  - workflow_run
+  - pull_request_review
+  - pull_request_review_comment
+
+# Permissions (read-only)
+default_permissions:
+  checks: read
+  pull_requests: read
+  actions: read
+  metadata: read

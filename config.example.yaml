@@ -1,0 +1,37 @@
+# Metarelay Configuration
+# Copy to ~/.metarelay/config.yaml and fill in your values.
+
+cloud:
+  # Supabase project URL (from Settings > API)
+  supabase_url: "https://YOUR-PROJECT.supabase.co"
+  # Supabase anon key (from Settings > API)
+  # Can also be set via METARELAY_SUPABASE_KEY env var
+  supabase_key: "YOUR-ANON-KEY"
+
+# Repositories to watch (owner/repo format)
+repos:
+  - "myorg/myrepo"
+
+# SQLite database path for cursor tracking and event log
+# db_path: "~/.metarelay/metarelay.db"
+
+# Logging level (DEBUG, INFO, WARNING, ERROR)
+# log_level: "INFO"
+
+# Handler definitions
+handlers:
+  # PR Shepherd: re-run on CI failure
+  - name: "pr-shepherd-ci-failure"
+    event_type: "check_run"
+    action: "completed"
+    command: "claude -p 'Run /project:pr-shepherd for PR on {{ref}} in {{repo}}. The check run {{summary}} has {{payload.conclusion}}.'"
+    filters:
+      - "payload.conclusion == 'failure'"
+    timeout: 300
+
+  # Handle new PR review comments
+  - name: "handle-review-comment"
+    event_type: "pull_request_review_comment"
+    action: "created"
+    command: "claude -p 'Run /project:handle-pr-comments for {{repo}}. New review comment from {{actor}}: {{summary}}'"
+    timeout: 300

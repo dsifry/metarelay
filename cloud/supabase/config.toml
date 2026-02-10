@@ -1,0 +1,16 @@
+[project]
+id = ""  # Fill in your Supabase project ID
+name = "metarelay"
+
+[api]
+port = 54321
+schemas = ["public"]
+
+[db]
+port = 54322
+
+[realtime]
+enabled = true
+
+[functions.github-webhook]
+verify_jwt = false
