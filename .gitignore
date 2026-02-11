@@ -31,6 +31,9 @@ htmlcov/
 .metarelay/
 config.yaml
 
+# MkDocs
+site/
+
 # Secrets
 .env
 *.pem

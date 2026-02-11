@@ -107,7 +107,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full architecture guide.
 ## Related Projects
 
 - **[goodtogo](https://github.com/dsifry/goodtogo)** — Claude Code workflow system (PR Shepherd, session management, task tracking)
-- **[warmstart-tng](https://github.com/dsifry/warmstart-tng)** — CI/CD actions for Claude Code
 
 ## License
 

@@ -1,0 +1,62 @@
+site_name: Metarelay
+site_url: https://dsifry.github.io/metarelay/
+site_description: Webhook-based event relay for Claude Code orchestration
+site_author: David Sifry
+repo_url: https://github.com/dsifry/metarelay
+repo_name: dsifry/metarelay
+edit_uri: edit/main/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - content.action.edit
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+  - include-markdown
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Cloud Setup: cloud-setup.md
+  - User Guide:
+    - Usage: usage.md
+    - Agents: agents.md
+  - Development:
+    - Contributing: contributing.md
+    - AI Agent Instructions: claude.md
+
+hooks:
+  - hooks/rewrite_links.py
