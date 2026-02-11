@@ -47,18 +47,46 @@ tail -f .metarelay/events.jsonl
 
 When a new line appears, the agent reads it, decides how to respond, acts, and then goes back to waiting.
 
+#### Reading Events
+
+Use `tail -f` piped through `read` to wait for the next event. This works on both macOS and Linux:
+
+```bash
+# Wait for the next new event line (blocks until one arrives)
+tail -n 0 -f .metarelay/events.jsonl | while IFS= read -r line; do
+  echo "$line"
+  break
+done
+```
+
+To process events continuously:
+
+```bash
+tail -f .metarelay/events.jsonl | while IFS= read -r line; do
+  EVENT_TYPE=$(echo "$line" | jq -r '.event_type')
+  ACTION=$(echo "$line" | jq -r '.action')
+  REF=$(echo "$line" | jq -r '.ref')
+
+  # Act on the event...
+done
+```
+
 #### Timeout Handling
 
-Claude Code's Bash tool has a maximum timeout (10 minutes). The subagent should loop, restarting `tail -f` if it times out:
+Claude Code's Bash tool has a built-in `timeout` parameter (max 10 minutes). Set it on the Bash tool call — do **not** use the `timeout` shell command, which is unavailable on macOS.
 
+If the Bash tool times out, the agent should simply loop and restart `tail -f`:
+
+```bash
+# Read one event, with timeout handled by the Bash tool (timeout=300000 for 5 min)
+tail -n 0 -f .metarelay/events.jsonl | while IFS= read -r line; do
+  echo "$line"
+  break
+done
+# If this exits with no output, the Bash tool timed out — just re-run
 ```
-while true:
-    event = tail -f .metarelay/events.jsonl  (blocks up to timeout)
-    if event received:
-        parse JSON, act on event
-    else:
-        # timeout — loop and restart tail -f
-```
+
+> **macOS note**: The `timeout` command (GNU coreutils) is not available on macOS. Do not use `timeout tail -f ...`. Use the Bash tool's timeout parameter or `read -t SECONDS` instead.
 
 #### Event Format
 
