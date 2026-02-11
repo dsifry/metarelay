@@ -1,6 +1,6 @@
 # Metarelay
 
-[Documentation](https://dsifry.github.io/metarelay/) | [License](LICENSE)
+[GitHub](https://github.com/dsifry/metarelay) | [Documentation](https://dsifry.github.io/metarelay/) | [License](LICENSE)
 
 **Event-driven orchestration for Claude Code.** Metarelay replaces GitHub API polling with a lightweight webhook relay — GitHub pushes events to Supabase, and your local daemon dispatches AI agents in response.
 
