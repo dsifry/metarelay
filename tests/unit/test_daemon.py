@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from metarelay.config import CloudConfig, MetarelayConfig
+from metarelay.config import CloudConfig, MetarelayConfig, RepoConfig
 from metarelay.container import Container
 from metarelay.core.models import (
     CursorPosition,
@@ -38,7 +38,7 @@ def make_container(
     """Create a test container with mocked adapters."""
     config = MetarelayConfig(
         cloud=CloudConfig(supabase_url="https://x.supabase.co", supabase_key="k"),
-        repos=["owner/repo"],
+        repos=[RepoConfig(name="owner/repo", path=str(tmp_path / "repo"))],
         db_path=str(tmp_path / "test.db"),
     )
 
@@ -110,7 +110,8 @@ class TestDaemonHandleEvent:
         daemon._handle_event(make_event())
 
         container.dispatcher.dispatch.assert_not_called()
-        container.event_store.set_cursor.assert_not_called()
+        # Cursor still advances even without handlers (prevents re-fetch on restart)
+        container.event_store.set_cursor.assert_called_once_with("owner/repo", 1)
 
     def test_advances_cursor_after_dispatch(self, tmp_path: Path) -> None:
         handler = HandlerConfig(
@@ -125,6 +126,48 @@ class TestDaemonHandleEvent:
         daemon._handle_event(make_event(id=42))
 
         container.event_store.set_cursor.assert_called_with("owner/repo", 42)
+
+
+class TestEventFileWriting:
+    """Tests for per-repo event file output."""
+
+    def test_writes_event_to_jsonl_file(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path, handlers=[])
+        daemon = Daemon(container)
+
+        daemon._handle_event(make_event())
+
+        event_file = tmp_path / "repo" / ".metarelay" / "events.jsonl"
+        assert event_file.exists()
+        lines = event_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+        import json
+
+        data = json.loads(lines[0])
+        assert data["repo"] == "owner/repo"
+        assert data["event_type"] == "check_run"
+
+    def test_skips_event_file_for_unknown_repo(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path, handlers=[])
+        daemon = Daemon(container)
+
+        # Event from a repo not in config
+        daemon._handle_event(make_event(repo="unknown/repo"))
+
+        # No event file created for unknown repo
+        event_file = tmp_path / "repo" / ".metarelay" / "events.jsonl"
+        assert not event_file.exists()
+
+    def test_appends_multiple_events(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path, handlers=[])
+        daemon = Daemon(container)
+
+        daemon._handle_event(make_event(id=1))
+        daemon._handle_event(make_event(id=2))
+
+        event_file = tmp_path / "repo" / ".metarelay" / "events.jsonl"
+        lines = event_file.read_text().strip().split("\n")
+        assert len(lines) == 2
 
 
 class TestDaemonCatchUp:

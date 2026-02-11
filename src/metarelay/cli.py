@@ -80,11 +80,11 @@ def status(config_path: str | None) -> None:
     click.echo("=" * 40)
 
     for repo in config.repos:
-        cursor = container.event_store.get_cursor(repo)
+        cursor = container.event_store.get_cursor(repo.name)
         if cursor:
-            click.echo(f"  {repo}: last_event_id={cursor.last_event_id}")
+            click.echo(f"  {repo.name}: last_event_id={cursor.last_event_id}")
         else:
-            click.echo(f"  {repo}: no cursor (not yet synced)")
+            click.echo(f"  {repo.name}: no cursor (not yet synced)")
 
 
 @main.command()

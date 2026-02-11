@@ -46,6 +46,8 @@ adapters/             ← Concrete implementations
 container.py          ← DI container wires ports to adapters
      ↑
 daemon.py             ← Business logic (uses ports, not adapters)
+  │                      Also writes events to per-repo .metarelay/events.jsonl
+  │                      for file-based dispatch to persistent subagents
 cli.py                ← User interface
 ```
 

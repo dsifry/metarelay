@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import signal
+from pathlib import Path
 
 from metarelay.container import Container
 from metarelay.core.models import DaemonStatus, Event, HandlerResultStatus
@@ -45,7 +47,7 @@ class Daemon:
             logger.info("Subscribing to live events...")
             self._status = DaemonStatus.LIVE
             await self._container.cloud_client.subscribe(
-                self._container.config.repos, self._handle_event
+                self._container.config.repo_names, self._handle_event
             )
 
             logger.info("Metarelay daemon is live. Waiting for events...")
@@ -63,7 +65,7 @@ class Daemon:
 
     async def _catch_up(self) -> None:
         """Paginated catch-up: fetch events since last cursor for each repo."""
-        for repo in self._container.config.repos:
+        for repo in self._container.config.repo_names:
             cursor = self._container.event_store.get_cursor(repo)
             after_id = cursor.last_event_id if cursor else 0
 
@@ -81,11 +83,14 @@ class Daemon:
                     after_id = event.id
 
     def _handle_event(self, event: Event) -> None:
-        """Process a single event: dedup → match → dispatch → log → advance cursor."""
+        """Process a single event: dedup → write event file → match → dispatch → advance cursor."""
         # Dedup check
         if self._container.event_store.has_event(event.id):
             logger.debug("Skipping duplicate event %d", event.id)
             return
+
+        # Write to per-repo event file (for persistent subagents)
+        self._write_event_file(event)
 
         # Find matching handlers
         handlers = self._container.registry.match(event)
@@ -96,38 +101,50 @@ class Daemon:
                 event.event_type,
                 event.action,
             )
+        else:
+            for handler in handlers:
+                logger.info(
+                    "Dispatching handler %s for event %d (%s/%s)",
+                    handler.name,
+                    event.id,
+                    event.event_type,
+                    event.action,
+                )
+
+                result = self._container.dispatcher.dispatch(handler, event)
+
+                # Log event + result
+                self._container.event_store.log_event(event, result)
+
+                if result.status == HandlerResultStatus.SUCCESS:
+                    logger.info(
+                        "Handler %s succeeded (%.1fs)",
+                        handler.name,
+                        result.duration_seconds or 0,
+                    )
+                else:
+                    logger.warning(
+                        "Handler %s finished with status %s: %s",
+                        handler.name,
+                        result.status.value,
+                        result.output,
+                    )
+
+        # Always advance cursor
+        self._container.event_store.set_cursor(event.repo, event.id)
+
+    def _write_event_file(self, event: Event) -> None:
+        """Append event as JSONL to the repo's local .metarelay/events.jsonl."""
+        repo_path = self._container.config.repo_path(event.repo)
+        if repo_path is None:
             return
 
-        for handler in handlers:
-            logger.info(
-                "Dispatching handler %s for event %d (%s/%s)",
-                handler.name,
-                event.id,
-                event.event_type,
-                event.action,
-            )
+        event_dir = Path(repo_path).expanduser() / ".metarelay"
+        event_dir.mkdir(parents=True, exist_ok=True)
+        event_file = event_dir / "events.jsonl"
 
-            result = self._container.dispatcher.dispatch(handler, event)
-
-            # Log event + result
-            self._container.event_store.log_event(event, result)
-
-            if result.status == HandlerResultStatus.SUCCESS:
-                logger.info(
-                    "Handler %s succeeded (%.1fs)",
-                    handler.name,
-                    result.duration_seconds or 0,
-                )
-            else:
-                logger.warning(
-                    "Handler %s finished with status %s: %s",
-                    handler.name,
-                    result.status.value,
-                    result.output,
-                )
-
-        # Advance cursor
-        self._container.event_store.set_cursor(event.repo, event.id)
+        with open(event_file, "a") as f:
+            f.write(event.model_dump_json() + "\n")
 
     def _request_shutdown(self) -> None:
         """Signal the daemon to shut down gracefully."""

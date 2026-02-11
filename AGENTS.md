@@ -4,46 +4,132 @@ How metarelay works with AI coding agents like Claude Code.
 
 ## Overview
 
-Metarelay bridges GitHub events to local AI agents. When a CI check fails or a PR review is posted, metarelay invokes a command — typically `claude -p '...'` — that spins up an agent to investigate and fix the issue automatically.
+Metarelay bridges GitHub events to local AI agents. When a CI check fails or a PR review is posted, metarelay receives the event and makes it available to agents via two dispatch models:
 
 ```
-GitHub CI fails → webhook → Supabase → metarelay daemon → claude -p 'Fix it'
+GitHub CI fails → webhook → Supabase → metarelay daemon
+                                            │
+                              ┌──────────────┼──────────────┐
+                              ▼                              ▼
+                     .metarelay/events.jsonl         subprocess handler
+                     (persistent subagents)          (one-shot commands)
 ```
 
-## How Handlers Invoke Agents
+## Dispatch Models
 
-Each handler has a `command` field that gets executed as a shell command. For Claude Code, this is usually:
+### File-Based (Recommended for Persistent Subagents)
+
+The daemon writes every event as a JSONL line to `.metarelay/events.jsonl` in the repo's local checkout directory. A persistent subagent watches this file with `tail -f` — zero polling, zero latency, zero process spawns.
+
+```
+metarelay daemon ──→ appends to .metarelay/events.jsonl
+                                    │
+                              tail -f (push)
+                                    │
+                          subagent wakes up, acts,
+                          goes back to waiting
+```
+
+This is the recommended approach for AI agents because:
+
+- **Zero startup cost**: The agent is already running, no new process per event
+- **Full context**: The agent retains conversation history and codebase knowledge
+- **Push-based**: No polling, no wasted API calls — events arrive instantly
+- **Natural batching**: Multiple events accumulate if the agent is busy
+
+#### How It Works
+
+When the daemon receives an event for a configured repo, it appends the event as a JSON line to `{repo.path}/.metarelay/events.jsonl`. A persistent subagent watches this file:
+
+```bash
+tail -f .metarelay/events.jsonl
+```
+
+When a new line appears, the agent reads it, decides how to respond, acts, and then goes back to waiting.
+
+#### Timeout Handling
+
+Claude Code's Bash tool has a maximum timeout (10 minutes). The subagent should loop, restarting `tail -f` if it times out:
+
+```
+while true:
+    event = tail -f .metarelay/events.jsonl  (blocks up to timeout)
+    if event received:
+        parse JSON, act on event
+    else:
+        # timeout — loop and restart tail -f
+```
+
+#### Event Format
+
+Each line is a JSON object with these fields:
+
+```json
+{
+  "id": 42,
+  "repo": "myorg/myrepo",
+  "event_type": "check_run",
+  "action": "completed",
+  "ref": "feat/my-feature",
+  "actor": "octocat",
+  "summary": "CI Build failure",
+  "payload": {"conclusion": "failure", ...},
+  "delivery_id": "abc-123",
+  "created_at": "2026-02-10T12:00:00Z"
+}
+```
+
+### Subprocess (For One-Shot Commands)
+
+Handlers defined in `config.yaml` run a shell command per event. This is simpler for one-shot tasks like notifications, scripts, or ad-hoc agent invocations.
 
 ```yaml
-command: "claude -p 'Your prompt here with {{template}} variables'"
+handlers:
+  - name: "fix-ci-failure"
+    event_type: "check_run"
+    action: "completed"
+    command: "claude -p 'Fix CI in {{repo}}: {{summary}}'"
+    filters:
+      - "payload.conclusion == 'failure'"
 ```
 
 The `claude -p` flag runs Claude Code in non-interactive ("prompt") mode — it receives the instruction, does the work, and exits.
 
-### Template Variables in Prompts
+#### Template Variables in Prompts
 
-Metarelay resolves `{{variable}}` placeholders before invoking the command, giving the agent full context about what happened:
+Metarelay resolves `{{variable}}` placeholders before invoking the command:
+
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| `{{repo}}` | Full repo name | `myorg/myrepo` |
+| `{{event_type}}` | GitHub event type | `check_run` |
+| `{{action}}` | Event action | `completed` |
+| `{{ref}}` | Git branch/tag | `feat/my-feature` |
+| `{{actor}}` | GitHub username | `octocat` |
+| `{{summary}}` | Human-readable summary | `CI Build failure` |
+| `{{payload.field}}` | Payload field | `failure` |
+
+## Recipes
+
+### PR Shepherd with File-Based Dispatch (Recommended)
+
+The PR Shepherd subagent runs persistently, watching for events:
+
+1. Configure the repo in `~/.metarelay/config.yaml`:
 
 ```yaml
-command: >-
-  claude -p 'The CI check "{{summary}}" failed on branch {{ref}}
-  in repo {{repo}}. The conclusion was {{payload.conclusion}}.
-  Actor: {{actor}}. Investigate and fix the issue.'
+repos:
+  - name: "myorg/myrepo"
+    path: "/home/user/projects/myrepo"
 ```
 
-This becomes something like:
+2. Start metarelay: `metarelay start`
 
-```bash
-claude -p 'The CI check "build failure" failed on branch feat/login
-in repo myorg/myapp. The conclusion was failure.
-Actor: octocat. Investigate and fix the issue.'
-```
+3. In the repo, the subagent watches `.metarelay/events.jsonl` and runs `/project:pr-shepherd` when CI fails or reviews come in.
 
-## Recipes: Common Agent Patterns
+No handler config needed — the file-based dispatch makes all events available to the subagent.
 
-### PR Shepherd on CI Failure
-
-When CI fails, invoke PR Shepherd to diagnose and fix:
+### PR Shepherd with Subprocess (One-Shot)
 
 ```yaml
 - name: "pr-shepherd-ci-failure"
@@ -59,9 +145,7 @@ When CI fails, invoke PR Shepherd to diagnose and fix:
   timeout: 600
 ```
 
-### Handle PR Review Comments
-
-When someone posts a review, invoke the comment handler:
+### Handle PR Review Comments (Subprocess)
 
 ```yaml
 - name: "handle-review"
@@ -72,35 +156,6 @@ When someone posts a review, invoke the comment handler:
     Review: {{summary}}.
     Run /project:handle-pr-comments to address the feedback.'
   timeout: 300
-```
-
-### Handle Inline Review Comments
-
-```yaml
-- name: "handle-inline-comment"
-  event_type: "pull_request_review_comment"
-  action: "created"
-  command: >-
-    claude -p 'New inline review comment from {{actor}} in {{repo}}:
-    {{summary}}.
-    Run /project:handle-pr-comments to address this comment.'
-  timeout: 300
-```
-
-### Chain Multiple Actions
-
-You can run multiple commands by chaining with `&&`:
-
-```yaml
-- name: "fix-and-notify"
-  event_type: "workflow_run"
-  action: "completed"
-  command: >-
-    claude -p 'Fix the workflow failure in {{repo}}: {{summary}}'
-    && curl -X POST https://hooks.slack.com/your/webhook
-    -d '{"text":"Agent fixing {{repo}} workflow failure"}'
-  filters:
-    - "payload.conclusion == 'failure'"
 ```
 
 ### Skip Bot-Generated Events
@@ -115,6 +170,21 @@ Filter out events from bots to avoid infinite loops:
   filters:
     - "actor != 'dependabot[bot]'"
     - "actor != 'github-actions[bot]'"
+```
+
+### Non-Agent Commands
+
+You're not limited to Claude Code. Any shell command works:
+
+```yaml
+# Slack notification
+command: "curl -X POST https://hooks.slack.com/your/webhook -d '{\"text\": \"CI failed in {{repo}}\"}'"
+
+# Custom script
+command: "python3 scripts/handle_failure.py --repo {{repo}} --ref {{ref}}"
+
+# macOS notification
+command: "osascript -e 'display notification \"CI failed in {{repo}}\"'"
 ```
 
 ## Integration with Good To Go
@@ -134,21 +204,6 @@ When an agent pushes a fix, it may trigger new CI events. To prevent infinite lo
 2. **Filter out bot actors**: Exclude `github-actions[bot]` or your app's bot name
 3. **Use timeouts**: Set reasonable `timeout` values (default 300s) so runaway agents are killed
 4. **Deduplication**: Metarelay's built-in dedup ensures the same event is never processed twice
-
-## Writing Custom Agent Commands
-
-You're not limited to Claude Code. Any command that can be run from a shell works:
-
-```yaml
-# Run a custom script
-command: "python3 scripts/handle_failure.py --repo {{repo}} --ref {{ref}}"
-
-# Use a different AI tool
-command: "aider --message 'Fix CI failure in {{repo}}: {{summary}}'"
-
-# Simple notification
-command: "osascript -e 'display notification \"CI failed in {{repo}}\"'"
-```
 
 ## Monitoring Agent Activity
 
@@ -170,24 +225,10 @@ The local SQLite database (`~/.metarelay/metarelay.db`) stores a log of every pr
 sqlite3 ~/.metarelay/metarelay.db "SELECT * FROM event_log ORDER BY id DESC LIMIT 10"
 ```
 
-## Testing Handlers Locally
+## Gitignore
 
-1. Start the daemon with verbose logging:
-   ```bash
-   metarelay start -v
-   ```
+Add `.metarelay/` to your repo's `.gitignore` to exclude the events file and any local state:
 
-2. Trigger a test webhook from GitHub App > Advanced > Recent Deliveries > Redeliver
-
-3. Watch the daemon output to see:
-   - Event received
-   - Handler matched (or not)
-   - Command executed
-   - Result (success/failure/timeout)
-
-For faster iteration, you can test command templates manually:
-
-```bash
-# Test what the resolved command looks like
-echo "claude -p 'Fix CI in myorg/myrepo on branch feat/test. Build concluded failure.'"
+```gitignore
+.metarelay/
 ```

@@ -15,7 +15,7 @@ class TestCLI:
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
         assert "metarelay" in result.output
-        assert "0.1.0" in result.output
+        assert "0.2.0" in result.output
 
     def test_help(self) -> None:
         runner = CliRunner()
@@ -56,7 +56,7 @@ class TestCLI:
                         "supabase_url": "https://test.supabase.co",
                         "supabase_key": "test-key",
                     },
-                    "repos": ["owner/repo"],
+                    "repos": [{"name": "owner/repo", "path": "/tmp/owner/repo"}],
                     "db_path": str(config_dir / "test.db"),
                 }
             )

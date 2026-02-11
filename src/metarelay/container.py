@@ -73,7 +73,7 @@ class Container:
         All parameters are optional. Provide mocks for the components
         you want to control in tests.
         """
-        from metarelay.config import CloudConfig
+        from metarelay.config import CloudConfig, RepoConfig
 
         if config is None:
             config = MetarelayConfig(
@@ -81,7 +81,7 @@ class Container:
                     supabase_url="https://test.supabase.co",
                     supabase_key="test-key",
                 ),
-                repos=["test/repo"],
+                repos=[RepoConfig(name="test/repo", path="/tmp/test/repo")],
             )
 
         # Use stubs that raise if accidentally called without being mocked

@@ -8,9 +8,12 @@ cloud:
   # Can also be set via METARELAY_SUPABASE_KEY env var
   supabase_key: "YOUR-ANON-KEY"
 
-# Repositories to watch (owner/repo format)
+# Repositories to watch
+# Each repo needs a name (owner/repo) and local checkout path.
+# Events are written to {path}/.metarelay/events.jsonl for persistent subagents.
 repos:
-  - "myorg/myrepo"
+  - name: "myorg/myrepo"
+    path: "/home/user/projects/myrepo"
 
 # SQLite database path for cursor tracking and event log
 # db_path: "~/.metarelay/metarelay.db"
@@ -18,7 +21,7 @@ repos:
 # Logging level (DEBUG, INFO, WARNING, ERROR)
 # log_level: "INFO"
 
-# Handler definitions
+# Handler definitions (one-shot subprocess dispatch)
 handlers:
   # PR Shepherd: re-run on CI failure
   - name: "pr-shepherd-ci-failure"

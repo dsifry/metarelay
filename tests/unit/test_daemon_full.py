@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from metarelay.config import CloudConfig, MetarelayConfig
+from metarelay.config import CloudConfig, MetarelayConfig, RepoConfig
 from metarelay.container import Container
 from metarelay.core.models import (
     DaemonStatus,
@@ -24,7 +24,7 @@ from metarelay.handlers.registry import HandlerRegistry
 def make_container(tmp_path: Path) -> Container:
     config = MetarelayConfig(
         cloud=CloudConfig(supabase_url="https://x.supabase.co", supabase_key="k"),
-        repos=["owner/repo"],
+        repos=[RepoConfig(name="owner/repo", path=str(tmp_path / "repo"))],
         db_path=str(tmp_path / "test.db"),
     )
     event_store = MagicMock()

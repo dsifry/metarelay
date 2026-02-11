@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from metarelay.config import CloudConfig, MetarelayConfig
+from metarelay.config import CloudConfig, MetarelayConfig, RepoConfig
 from metarelay.container import Container
 
 
@@ -16,15 +16,15 @@ class TestContainer:
     def test_create_for_testing_defaults(self) -> None:
         container = Container.create_for_testing()
         assert container.config is not None
-        assert container.config.repos == ["test/repo"]
+        assert container.config.repo_names == ["test/repo"]
 
     def test_create_for_testing_with_custom_config(self) -> None:
         config = MetarelayConfig(
             cloud=CloudConfig(supabase_url="https://x.supabase.co", supabase_key="k"),
-            repos=["custom/repo"],
+            repos=[RepoConfig(name="custom/repo", path="/tmp/custom/repo")],
         )
         container = Container.create_for_testing(config=config)
-        assert container.config.repos == ["custom/repo"]
+        assert container.config.repo_names == ["custom/repo"]
 
     def test_create_for_testing_stubs_raise(self) -> None:
         container = Container.create_for_testing()
@@ -39,7 +39,7 @@ class TestContainer:
                 supabase_url="https://test.supabase.co",
                 supabase_key="test-key",
             ),
-            repos=["owner/repo"],
+            repos=[RepoConfig(name="owner/repo", path="/tmp/owner/repo")],
             db_path=str(tmp_path / "test.db"),
             handlers=[],
         )
@@ -54,7 +54,7 @@ class TestContainer:
                 supabase_url="https://test.supabase.co",
                 supabase_key="test-key",
             ),
-            repos=["owner/repo"],
+            repos=[RepoConfig(name="owner/repo", path="/tmp/owner/repo")],
             db_path=str(tmp_path / "test.db"),
             handlers=[
                 {

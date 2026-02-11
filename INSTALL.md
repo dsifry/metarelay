@@ -59,7 +59,7 @@ mkdir -p ~/.metarelay
 cp config.example.yaml ~/.metarelay/config.yaml
 ```
 
-Edit `~/.metarelay/config.yaml` with your Supabase credentials and repos.
+Edit `~/.metarelay/config.yaml` with your Supabase credentials and repo name/path pairs.
 See [USAGE.md](USAGE.md) for full configuration reference.
 
 ## Cloud Setup

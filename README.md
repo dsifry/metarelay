@@ -15,11 +15,20 @@ GitHub webhooks ──→ Supabase Edge Function ──→ PostgreSQL
                                                    │
                                             Local daemon
                                                    │
-                                    ┌──────────────┼──────────────┐
-                                    ▼              ▼              ▼
-                             PR Shepherd    Handle Reviews    Custom handlers
-                            (claude -p)     (claude -p)      (any command)
+                              ┌─────────────────────┼──────────────────────┐
+                              ▼                                            ▼
+                     ~/.metarelay/events.jsonl                    One-shot handlers
+                              │                                   (claude -p, curl,
+                        tail -f (push)                             any command)
+                              │
+                    Persistent subagent
+                    wakes up and acts
 ```
+
+Metarelay supports two dispatch models:
+
+- **File-based (recommended)**: The daemon appends events to `.metarelay/events.jsonl` in each repo's local checkout. A persistent subagent runs `tail -f` on the file — zero polling, zero latency, zero process spawns. When an event lands, the agent wakes up, acts, and goes back to waiting.
+- **Subprocess**: The daemon runs a shell command per event (e.g., `claude -p '...'`). Simple for one-shot handlers like Slack notifications or custom scripts.
 
 **On startup**, the daemon catches up on any events it missed (cursor-based pagination). Then it subscribes to live events via WebSocket. Events are deduplicated at both cloud and local levels — handlers never fire twice for the same event.
 
@@ -35,7 +44,7 @@ pip install -e .
 # Configure (after setting up Supabase — see cloud/setup.md)
 mkdir -p ~/.metarelay
 cp config.example.yaml ~/.metarelay/config.yaml
-# Edit with your Supabase URL, key, and repos
+# Edit with your Supabase URL, key, and repo name/path
 
 # Run
 metarelay start

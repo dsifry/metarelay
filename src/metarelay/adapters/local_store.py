@@ -59,9 +59,9 @@ class SqliteEventStore(EventStorePort):
         path = Path(self.db_path)
         db_dir = path.parent
 
-        if db_dir and not db_dir.exists():
+        if not db_dir.exists():
             db_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
-        elif db_dir and db_dir.exists():
+        else:
             current_mode = stat.S_IMODE(db_dir.stat().st_mode)
             if current_mode != 0o700:
                 db_dir.chmod(0o700)
@@ -83,9 +83,8 @@ class SqliteEventStore(EventStorePort):
         conn.executescript(_CREATE_TABLES_SQL)
         conn.commit()
 
-        path = Path(self.db_path)
-        if path.exists():
-            path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        # File is guaranteed to exist after executescript creates/opens the DB
+        Path(self.db_path).chmod(stat.S_IRUSR | stat.S_IWUSR)
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get or create a database connection."""

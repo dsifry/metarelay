@@ -98,7 +98,8 @@ cloud:
   supabase_key: "YOUR-ANON-KEY"
 
 repos:
-  - "your-org/your-repo"
+  - name: "your-org/your-repo"
+    path: "/home/user/projects/your-repo"
 
 handlers:
   - name: "pr-shepherd-ci-failure"

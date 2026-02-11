@@ -21,7 +21,7 @@ def make_config_file(tmp_path: Path) -> Path:
                     "supabase_url": "https://test.supabase.co",
                     "supabase_key": "test-key",
                 },
-                "repos": ["owner/repo"],
+                "repos": [{"name": "owner/repo", "path": "/tmp/owner/repo"}],
                 "db_path": str(tmp_path / "test.db"),
             }
         )

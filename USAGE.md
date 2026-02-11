@@ -82,9 +82,13 @@ cloud:
   supabase_key: "YOUR-ANON-KEY"
 
 # Required: repos to watch
+# Each repo needs a name (owner/repo) and a local checkout path.
+# Events are written to {path}/.metarelay/events.jsonl for persistent subagents.
 repos:
-  - "your-org/your-repo"
-  - "your-org/another-repo"
+  - name: "your-org/your-repo"
+    path: "/home/user/projects/your-repo"
+  - name: "your-org/another-repo"
+    path: "/home/user/projects/another-repo"
 
 # Optional: local database path (default: ~/.metarelay/metarelay.db)
 db_path: "~/.metarelay/metarelay.db"
@@ -92,7 +96,7 @@ db_path: "~/.metarelay/metarelay.db"
 # Optional: logging level (default: INFO)
 log_level: "INFO"
 
-# Optional: handler definitions
+# Optional: handler definitions (one-shot subprocess dispatch)
 handlers:
   - name: "handler-name"
     event_type: "check_run"         # GitHub event type
@@ -102,6 +106,16 @@ handlers:
       - "payload.conclusion == 'failure'"
     timeout: 300                    # Seconds before timeout (default: 300)
     enabled: true                   # Toggle without removing (default: true)
+```
+
+### Per-Repo Event Files
+
+For every event the daemon processes, it appends a JSONL line to `{repo.path}/.metarelay/events.jsonl`. This enables persistent subagents to watch for events with `tail -f` instead of spawning a new process per event. See [AGENTS.md](AGENTS.md) for the full file-based dispatch guide.
+
+Add `.metarelay/` to your repo's `.gitignore`:
+
+```gitignore
+.metarelay/
 ```
 
 ### Environment Variable Overrides

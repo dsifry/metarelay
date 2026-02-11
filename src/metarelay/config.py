@@ -33,24 +33,42 @@ class HandlerConfigYAML(BaseModel):
     enabled: bool = Field(default=True)
 
 
+class RepoConfig(BaseModel):
+    """Configuration for a watched repository."""
+
+    name: str = Field(description="Full repo name (owner/repo)")
+    path: str = Field(description="Local checkout path")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Validate repo name is in owner/repo format."""
+        parts = v.split("/")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise ValueError(f"Invalid repo format: {v!r}. Expected 'owner/repo'.")
+        return v
+
+
 class MetarelayConfig(BaseModel):
     """Top-level metarelay configuration."""
 
     cloud: CloudConfig
-    repos: list[str] = Field(description="Repos to watch (owner/repo format)")
+    repos: list[RepoConfig] = Field(description="Repos to watch")
     handlers: list[HandlerConfigYAML] = Field(default_factory=list)
     db_path: str = Field(default="~/.metarelay/metarelay.db", description="SQLite database path")
     log_level: str = Field(default="INFO", description="Logging level")
 
-    @field_validator("repos")
-    @classmethod
-    def validate_repos(cls, v: list[str]) -> list[str]:
-        """Validate repo names are in owner/repo format."""
-        for repo in v:
-            parts = repo.split("/")
-            if len(parts) != 2 or not parts[0] or not parts[1]:
-                raise ValueError(f"Invalid repo format: {repo!r}. Expected 'owner/repo'.")
-        return v
+    @property
+    def repo_names(self) -> list[str]:
+        """List of repo name strings (for APIs that need just names)."""
+        return [r.name for r in self.repos]
+
+    def repo_path(self, repo_name: str) -> str | None:
+        """Look up the local path for a repo by name."""
+        for r in self.repos:
+            if r.name == repo_name:
+                return r.path
+        return None
 
 
 def load_config(path: str | None = None) -> MetarelayConfig:

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from metarelay.adapters.local_store import SqliteEventStore
-from metarelay.config import CloudConfig, MetarelayConfig
+from metarelay.config import CloudConfig, MetarelayConfig, RepoConfig
 from metarelay.container import Container
 from metarelay.core.models import (
     Event,
@@ -43,7 +43,7 @@ def relay_setup(tmp_path: Path) -> tuple[Container, Daemon]:
             supabase_url="https://test.supabase.co",
             supabase_key="test-key",
         ),
-        repos=["owner/repo"],
+        repos=[RepoConfig(name="owner/repo", path=str(tmp_path / "repo"))],
         db_path=str(tmp_path / "relay.db"),
     )
 
@@ -184,7 +184,7 @@ class TestCLIIntegration:
                         "supabase_url": "https://test.supabase.co",
                         "supabase_key": "test-key",
                     },
-                    "repos": ["owner/repo"],
+                    "repos": [{"name": "owner/repo", "path": "/tmp/owner/repo"}],
                     "db_path": str(tmp_path / "test.db"),
                 }
             )

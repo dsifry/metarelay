@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metarelay"
-version = "0.1.0"
+version = "0.2.0"
 description = "Webhook-based event relay for Claude Code orchestration"
 readme = "README.md"
 license = "MIT"

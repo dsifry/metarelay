@@ -62,12 +62,10 @@ def _evaluate_filters(filters: list[str], event: Event) -> bool:
         field_path, operator, expected = match.groups()
         actual = _resolve_field(field_path, event)
 
-        if operator == "==":
-            if str(actual) != expected:
-                return False
-        elif operator == "!=":
-            if str(actual) == expected:
-                return False
+        if operator == "==" and str(actual) != expected:
+            return False
+        if operator == "!=" and str(actual) == expected:
+            return False
 
     return True
 
