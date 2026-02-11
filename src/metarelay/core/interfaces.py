@@ -77,12 +77,20 @@ class CloudClientPort(ABC):
         """
 
     @abstractmethod
-    async def subscribe(self, repos: list[str], callback: Callable[[Event], None]) -> None:
+    async def subscribe(
+        self,
+        repos: list[str],
+        callback: Callable[[Event], None],
+        on_status_change: Callable[[str, Exception | None], None] | None = None,
+    ) -> None:
         """Subscribe to live events via Realtime WebSocket.
 
         Args:
             repos: List of repo names to subscribe to.
             callback: Function called for each new event.
+            on_status_change: Optional callback for subscription status changes.
+                Called with (status, error) where status is one of:
+                "SUBSCRIBED", "CHANNEL_ERROR", "TIMED_OUT".
         """
 
 

@@ -67,7 +67,12 @@ class SupabaseCloudClient(CloudClientPort):
             events.append(_row_to_event(row))
         return events
 
-    async def subscribe(self, repos: list[str], callback: Callable[[Event], None]) -> None:
+    async def subscribe(
+        self,
+        repos: list[str],
+        callback: Callable[[Event], None],
+        on_status_change: Callable[[str, Exception | None], None] | None = None,
+    ) -> None:
         """Subscribe to live events via Supabase Realtime.
 
         Listens for INSERT events on the events table and calls
@@ -91,6 +96,13 @@ class SupabaseCloudClient(CloudClientPort):
             except Exception:
                 logger.exception("Failed to process Realtime event")
 
+        def on_subscribe_status(status: Any, error: Exception | None = None) -> None:
+            """Forward Supabase subscription status to the daemon."""
+            status_str = str(status.value) if hasattr(status, "value") else str(status)
+            logger.info("Subscription status: %s", status_str)
+            if on_status_change is not None:
+                on_status_change(status_str, error)
+
         try:
             self._channel = self._client.realtime.channel("events")
             self._channel.on_postgres_changes(
@@ -99,7 +111,7 @@ class SupabaseCloudClient(CloudClientPort):
                 table="events",
                 callback=on_event,
             )
-            await self._channel.subscribe()
+            await self._channel.subscribe(callback=on_subscribe_status)
         except Exception as e:
             raise ConnectionError(f"Failed to subscribe to Realtime: {e}") from e
 

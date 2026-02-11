@@ -113,9 +113,11 @@ Metarelay resolves `{{variable}}` placeholders before invoking the command:
 
 ### PR Shepherd with File-Based Dispatch (Recommended)
 
-The PR Shepherd subagent runs persistently, watching for events:
+The PR Shepherd subagent runs persistently, watching for events. A complete sample skill is provided in [`examples/pr-shepherd/pr-shepherd.md`](examples/pr-shepherd/pr-shepherd.md) — copy it into your project's `.claude/commands/` directory and customize it.
 
-1. Configure the repo in `~/.metarelay/config.yaml`:
+1. Copy the sample skill: `cp examples/pr-shepherd/pr-shepherd.md /path/to/your-repo/.claude/commands/pr-shepherd.md`
+
+2. Configure the repo in `~/.metarelay/config.yaml`:
 
 ```yaml
 repos:
@@ -123,9 +125,11 @@ repos:
     path: "/home/user/projects/myrepo"
 ```
 
-2. Start metarelay: `metarelay start`
+3. Add `.metarelay/` to your repo's `.gitignore`
 
-3. In the repo, the subagent watches `.metarelay/events.jsonl` and runs `/project:pr-shepherd` when CI fails or reviews come in.
+4. Start metarelay: `metarelay start`
+
+5. In the repo, the subagent watches `.metarelay/events.jsonl` and runs `/project:pr-shepherd` when CI fails or reviews come in.
 
 No handler config needed — the file-based dispatch makes all events available to the subagent.
 

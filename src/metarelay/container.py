@@ -108,7 +108,9 @@ class Container:
             async def fetch_events_since(self, repo: str, after_id: int, limit: int = 100) -> list:
                 raise NotImplementedError("Provide a mock cloud_client")
 
-            async def subscribe(self, repos: list, callback: object) -> None:
+            async def subscribe(
+                self, repos: list, callback: object, on_status_change: object = None
+            ) -> None:
                 raise NotImplementedError("Provide a mock cloud_client")
 
         class StubDispatcher(DispatcherPort):

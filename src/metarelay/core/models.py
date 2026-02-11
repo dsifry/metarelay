@@ -89,6 +89,7 @@ class DaemonStatus(str, Enum):
     STARTING = "starting"
     CATCHING_UP = "catching_up"
     LIVE = "live"
+    RECONNECTING = "reconnecting"
     SHUTTING_DOWN = "shutting_down"
     STOPPED = "stopped"
     ERROR = "error"

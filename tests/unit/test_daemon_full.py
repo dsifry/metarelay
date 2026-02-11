@@ -1,4 +1,4 @@
-"""Tests for daemon full lifecycle (run, shutdown, sync)."""
+"""Tests for daemon full lifecycle (run, shutdown, sync, reconnection)."""
 
 from __future__ import annotations
 
@@ -54,7 +54,9 @@ class TestDaemonRun:
         daemon = Daemon(container)
 
         # Make subscribe trigger shutdown
-        async def fake_subscribe(repos: list, callback: object) -> None:
+        async def fake_subscribe(
+            repos: list, callback: object, on_status_change: object = None
+        ) -> None:
             daemon._request_shutdown()
 
         container.cloud_client.subscribe.side_effect = fake_subscribe
@@ -66,7 +68,7 @@ class TestDaemonRun:
 
         container.cloud_client.connect.assert_awaited_once()
         container.cloud_client.subscribe.assert_awaited_once()
-        container.cloud_client.disconnect.assert_awaited_once()
+        container.cloud_client.disconnect.assert_awaited()
         assert daemon.status == DaemonStatus.STOPPED
 
     @pytest.mark.asyncio
@@ -81,6 +83,111 @@ class TestDaemonRun:
                 await daemon.run()
 
         assert daemon.status == DaemonStatus.STOPPED
+
+    @pytest.mark.asyncio
+    async def test_run_reconnects_on_connection_lost(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path)
+        daemon = Daemon(container)
+
+        call_count = 0
+
+        async def fake_subscribe(
+            repos: list, callback: object, on_status_change: object = None
+        ) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # First subscribe: simulate connection loss via status callback
+                if on_status_change is not None:
+                    on_status_change("CHANNEL_ERROR", Exception("ws closed"))
+            else:
+                # Second subscribe: shut down cleanly
+                daemon._request_shutdown()
+
+        container.cloud_client.subscribe.side_effect = fake_subscribe
+
+        loop = asyncio.get_event_loop()
+        with patch.object(loop, "add_signal_handler"):
+            with patch("metarelay.daemon.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                await daemon.run()
+
+        assert call_count == 2
+        # Connected twice (initial + reconnect)
+        assert container.cloud_client.connect.await_count == 2
+        # Disconnect called: once for reconnect cleanup + once in finally
+        assert container.cloud_client.disconnect.await_count >= 2
+        # Backoff sleep was called
+        mock_sleep.assert_awaited_once_with(1.0)
+        assert daemon.status == DaemonStatus.STOPPED
+
+    @pytest.mark.asyncio
+    async def test_run_reconnect_backoff_increases(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path)
+        daemon = Daemon(container)
+
+        call_count = 0
+
+        async def fake_subscribe(
+            repos: list, callback: object, on_status_change: object = None
+        ) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 3:
+                # First 3 subscribes: simulate connection loss
+                if on_status_change is not None:
+                    on_status_change("TIMED_OUT", None)
+            else:
+                # 4th subscribe: shut down
+                daemon._request_shutdown()
+
+        container.cloud_client.subscribe.side_effect = fake_subscribe
+
+        loop = asyncio.get_event_loop()
+        with patch.object(loop, "add_signal_handler"):
+            with patch("metarelay.daemon.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                await daemon.run()
+
+        assert call_count == 4
+        # Backoff: 1.0, 2.0, 4.0
+        sleep_args = [call.args[0] for call in mock_sleep.await_args_list]
+        assert sleep_args == [1.0, 2.0, 4.0]
+
+    @pytest.mark.asyncio
+    async def test_run_resets_backoff_on_successful_subscribe(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path)
+        daemon = Daemon(container)
+
+        call_count = 0
+
+        async def fake_subscribe(
+            repos: list, callback: object, on_status_change: object = None
+        ) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # First: fail immediately (before backoff reset)
+                if on_status_change is not None:
+                    on_status_change("CHANNEL_ERROR", None)
+            elif call_count == 2:
+                # Second: succeed (backoff resets), then lose connection
+                # Schedule error to fire after subscribe returns (on next event loop tick)
+                loop = asyncio.get_event_loop()
+                loop.call_soon(on_status_change, "CHANNEL_ERROR", None)
+            else:
+                # Third: shut down
+                daemon._request_shutdown()
+
+        container.cloud_client.subscribe.side_effect = fake_subscribe
+
+        loop = asyncio.get_event_loop()
+        with patch.object(loop, "add_signal_handler"):
+            with patch("metarelay.daemon.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                await daemon.run()
+
+        # First sleep: 1.0 (immediate failure, no reset)
+        # Second sleep: 1.0 (backoff was reset because subscribe returned cleanly)
+        sleep_args = [call.args[0] for call in mock_sleep.await_args_list]
+        assert sleep_args == [1.0, 1.0]
 
     def test_status_property(self, tmp_path: Path) -> None:
         container = make_container(tmp_path)
@@ -112,6 +219,44 @@ class TestDaemonRun:
 
         container.dispatcher.dispatch.assert_called_once()
         container.event_store.log_event.assert_called_once()
+
+
+class TestSubscriptionStatus:
+    """Tests for _on_subscription_status callback."""
+
+    def test_channel_error_sets_connection_lost(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path)
+        daemon = Daemon(container)
+        daemon._connection_lost = asyncio.Event()
+
+        daemon._on_subscription_status("CHANNEL_ERROR", Exception("test"))
+
+        assert daemon._connection_lost.is_set()
+
+    def test_timed_out_sets_connection_lost(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path)
+        daemon = Daemon(container)
+        daemon._connection_lost = asyncio.Event()
+
+        daemon._on_subscription_status("TIMED_OUT", None)
+
+        assert daemon._connection_lost.is_set()
+
+    def test_subscribed_does_not_set_connection_lost(self, tmp_path: Path) -> None:
+        container = make_container(tmp_path)
+        daemon = Daemon(container)
+        daemon._connection_lost = asyncio.Event()
+
+        daemon._on_subscription_status("SUBSCRIBED", None)
+
+        assert not daemon._connection_lost.is_set()
+
+    def test_status_callback_without_connection_lost_event(self, tmp_path: Path) -> None:
+        """Status callback is safe when called before run() initializes _connection_lost."""
+        container = make_container(tmp_path)
+        daemon = Daemon(container)
+        # _connection_lost is None before run()
+        daemon._on_subscription_status("CHANNEL_ERROR", Exception("test"))
 
 
 class TestRunSync:

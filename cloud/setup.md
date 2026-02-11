@@ -2,9 +2,11 @@
 
 Step-by-step instructions for setting up the Supabase backend and GitHub App.
 
+> **Why run these commands from the metarelay repo?** The `cloud/supabase/` directory contains the Edge Function source code and database migration files. You deploy them to Supabase from here — this is a one-time infrastructure setup, not something that lives in your monitored repos. See [INSTALL.md](../INSTALL.md) for the full picture of how metarelay is structured.
+
 ## Prerequisites
 
-- [Supabase CLI](https://supabase.com/docs/guides/cli) installed
+- **[Supabase CLI](https://supabase.com/docs/guides/cli)** — see [install instructions](https://supabase.com/docs/guides/cli/getting-started#installing-the-supabase-cli) for your platform
 - A Supabase account (free tier works)
 - A GitHub account with admin access to target repos
 

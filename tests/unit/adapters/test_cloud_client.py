@@ -215,6 +215,67 @@ class TestSupabaseCloudClient:
         assert callback.call_count == 0
 
     @pytest.mark.asyncio
+    async def test_subscribe_status_callback_with_enum(self) -> None:
+        """Status callback extracts .value from enum-like status objects."""
+        client = SupabaseCloudClient("https://test.supabase.co", "test-key")
+        mock_client = MagicMock()
+        mock_channel = MagicMock()
+        mock_channel.subscribe = AsyncMock()
+        mock_client.realtime.channel.return_value = mock_channel
+        client._client = mock_client
+
+        status_callback = MagicMock()
+        await client.subscribe(["owner/repo"], MagicMock(), on_status_change=status_callback)
+
+        # Get the callback passed to channel.subscribe()
+        on_status = mock_channel.subscribe.call_args[1]["callback"]
+
+        # Simulate enum-like status with .value attribute
+        enum_status = MagicMock()
+        enum_status.value = "SUBSCRIBED"
+        on_status(enum_status)
+
+        status_callback.assert_called_once_with("SUBSCRIBED", None)
+
+    @pytest.mark.asyncio
+    async def test_subscribe_status_callback_with_string(self) -> None:
+        """Status callback handles plain string status."""
+        client = SupabaseCloudClient("https://test.supabase.co", "test-key")
+        mock_client = MagicMock()
+        mock_channel = MagicMock()
+        mock_channel.subscribe = AsyncMock()
+        mock_client.realtime.channel.return_value = mock_channel
+        client._client = mock_client
+
+        status_callback = MagicMock()
+        await client.subscribe(["owner/repo"], MagicMock(), on_status_change=status_callback)
+
+        on_status = mock_channel.subscribe.call_args[1]["callback"]
+        err = Exception("test")
+        on_status("CHANNEL_ERROR", err)
+
+        status_callback.assert_called_once()
+        args = status_callback.call_args[0]
+        assert args[0] == "CHANNEL_ERROR"
+        assert args[1] is err
+
+    @pytest.mark.asyncio
+    async def test_subscribe_status_callback_none(self) -> None:
+        """Status callback works when on_status_change is not provided."""
+        client = SupabaseCloudClient("https://test.supabase.co", "test-key")
+        mock_client = MagicMock()
+        mock_channel = MagicMock()
+        mock_channel.subscribe = AsyncMock()
+        mock_client.realtime.channel.return_value = mock_channel
+        client._client = mock_client
+
+        await client.subscribe(["owner/repo"], MagicMock())
+
+        on_status = mock_channel.subscribe.call_args[1]["callback"]
+        # Should not raise even without on_status_change
+        on_status("SUBSCRIBED")
+
+    @pytest.mark.asyncio
     async def test_subscribe_callback_uses_new_key(self) -> None:
         client = SupabaseCloudClient("https://test.supabase.co", "test-key")
         mock_client = MagicMock()

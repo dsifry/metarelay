@@ -1,6 +1,4 @@
-[project]
-id = ""  # Fill in your Supabase project ID
-name = "metarelay"
+project_id = ""  # Fill in your Supabase project ID
 
 [api]
 port = 54321

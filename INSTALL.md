@@ -1,5 +1,29 @@
 # Installation
 
+## How Metarelay Is Structured
+
+Metarelay has two parts that live in different places:
+
+1. **This repo (`metarelay/`)** — the infrastructure source code. It contains the Supabase Edge Function, database migration, and the local daemon. You clone it once, deploy the cloud pieces from it, and install the daemon CLI from it. Think of it like installing a tool.
+
+2. **`.metarelay/` in each monitored repo** — a runtime directory created automatically by the daemon. It contains `events.jsonl` (the event stream for that repo). This directory should be added to each repo's `.gitignore`.
+
+```
+metarelay/                          ← You clone this once
+├── cloud/supabase/                 ← Deploy infrastructure from here
+│   ├── migrations/                 ← Database schema
+│   └── functions/github-webhook/   ← Edge Function source
+├── examples/                       ← Sample skills to copy into your projects
+│   └── pr-shepherd/                ← Event-driven PR monitoring skill
+└── src/                            ← Daemon source code
+
+your-project/                       ← Each monitored repo
+├── .metarelay/                     ← Created at runtime (gitignored)
+│   └── events.jsonl                ← Event stream for this repo
+└── .claude/commands/               ← Where you'd put the pr-shepherd skill
+    └── pr-shepherd.md              ← Copied from examples/
+```
+
 ## Prerequisites
 
 - **Python 3.11+** (check with `python3 --version`)
@@ -71,6 +95,32 @@ See [cloud/setup.md](cloud/setup.md) for step-by-step setup instructions coverin
 2. Running the database migration
 3. Deploying the Edge Function
 4. Creating and installing a GitHub App
+
+## Setting Up Your Repos
+
+For each repo you want to monitor:
+
+1. **Add `.metarelay/` to `.gitignore`**:
+
+   ```bash
+   echo '.metarelay/' >> /path/to/your-repo/.gitignore
+   ```
+
+2. **Add the repo to your config** (`~/.metarelay/config.yaml`):
+
+   ```yaml
+   repos:
+     - name: "your-org/your-repo"
+       path: "/path/to/your-repo"
+   ```
+
+3. **(Optional) Copy the PR Shepherd sample skill** into your project for event-driven PR monitoring:
+
+   ```bash
+   cp /path/to/metarelay/examples/pr-shepherd/pr-shepherd.md /path/to/your-repo/.claude/commands/pr-shepherd.md
+   ```
+
+   This gives your Claude Code agents a `/project:pr-shepherd` command that reacts instantly to CI failures and review comments via MetaRelay events. See [AGENTS.md](AGENTS.md) for details and more recipes.
 
 ## Updating
 
